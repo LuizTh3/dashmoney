@@ -6,6 +6,8 @@ import {
   signInWithEmailAndPassword, 
   signOut as firebaseSignOut, 
   onAuthStateChanged,
+  updatePassword,
+  updateProfile,
 } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
@@ -28,6 +30,7 @@ interface AppState {
   toggleSidebar: () => void;
   setFilterPeriod: (period: FilterPeriod) => void;
   initAuth: () => () => void;
+  updateProfile: (name: string, password?: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useStore = create<AppState>()(
@@ -120,6 +123,33 @@ export const useStore = create<AppState>()(
         });
 
         return unsubscribe;
+      },
+
+      updateProfile: async (name: string, password?: string) => {
+        try {
+          const firebaseUser = auth.currentUser;
+          if (!firebaseUser) {
+            return { success: false, error: 'Usuário não autenticado' };
+          }
+
+          if (name && name.trim()) {
+            await updateProfile(firebaseUser, { displayName: name.trim() });
+            
+            if (get().user) {
+              set({ user: { ...get().user!, displayName: name.trim() } });
+            }
+          }
+
+          if (password && password.length >= 6) {
+            await updatePassword(firebaseUser, password);
+          }
+
+          return { success: true };
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+          console.error('Update profile error:', errorMessage);
+          return { success: false, error: errorMessage };
+        }
       },
     }),
     {

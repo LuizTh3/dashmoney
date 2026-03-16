@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sun, Moon, LogOut, User, Mail } from 'lucide-react';
+import { Sun, Moon, LogOut, User, Mail, Loader2, Save } from 'lucide-react';
 import { Layout } from '../components/layout';
-import { Card, Button, Select } from '../components/ui';
+import { Card, Button, Select, Input } from '../components/ui';
 import { useStore } from '../store/useStore';
 import { updateUserPreferences } from '../services/firestore';
 
@@ -14,14 +14,57 @@ const CURRENCY_OPTIONS = [
 
 export function Settings() {
   const navigate = useNavigate();
-  const { user, theme, logout, setTheme } = useStore();
+  const { user, theme, logout, setTheme, updateProfile } = useStore();
   const [currency, setCurrency] = useState(user?.currency || 'BRL');
+  
+  const [name, setName] = useState(user?.displayName || '');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState(false);
 
   useEffect(() => {
     if (user?.currency) {
       setCurrency(user.currency);
     }
-  }, [user?.currency]);
+    if (user?.displayName) {
+      setName(user.displayName);
+    }
+  }, [user?.currency, user?.displayName]);
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileError('');
+    setProfileSuccess(false);
+
+    if (password && password.length < 6) {
+      setProfileError('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    if (password && password !== confirmPassword) {
+      setProfileError('As senhas não conferem');
+      return;
+    }
+
+    setProfileLoading(true);
+    try {
+      const result = await updateProfile(name, password || undefined);
+      if (result.success) {
+        setProfileSuccess(true);
+        setPassword('');
+        setConfirmPassword('');
+        setTimeout(() => setProfileSuccess(false), 3000);
+      } else {
+        setProfileError(result.error || 'Erro ao atualizar perfil');
+      }
+    } catch (error) {
+      setProfileError('Erro ao atualizar perfil');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
 
   const handleCurrencyChange = async (value: string) => {
     setCurrency(value);
@@ -104,6 +147,60 @@ export function Settings() {
               options={CURRENCY_OPTIONS}
             />
           </div>
+        </Card>
+
+        {/* Perfil */}
+        <Card>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Editar Perfil
+          </h2>
+          <form onSubmit={handleProfileSubmit} className="space-y-4">
+            <Input
+              label="Nome"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Seu nome completo"
+            />
+            
+            <Input
+              type="password"
+              label="Nova Senha"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Mínimo 6 caracteres (deixe vazio para manter)"
+            />
+            
+            <Input
+              type="password"
+              label="Confirmar Senha"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="Confirme a nova senha"
+            />
+
+            {profileError && (
+              <p className="text-sm text-red-500">{profileError}</p>
+            )}
+
+            {profileSuccess && (
+              <p className="text-sm text-green-500">Perfil atualizado com sucesso!</p>
+            )}
+
+            <Button
+              type="submit"
+              disabled={profileLoading}
+              className="w-full"
+            >
+              {profileLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Salvar Alterações
+                </>
+              )}
+            </Button>
+          </form>
         </Card>
 
         {/* Conta */}
