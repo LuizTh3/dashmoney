@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 import { Layout } from '../components/layout';
 import { Card, Button, Input, Modal, Select } from '../components/ui';
-import { mockTransactions } from '../data/mock';
-import { getCategories, addCategory, updateCategory, deleteCategory } from '../services/firestore';
+import { getCategories, addCategory, updateCategory, deleteCategory, getTransactions } from '../services/firestore';
 import { useStore } from '../store/useStore';
-import type { Category, CategoryType } from '../types';
+import type { Category, CategoryType, Transaction } from '../types';
 
 const CATEGORY_COLORS = [
   '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9',
@@ -23,6 +22,7 @@ const EMOJI_OPTIONS = [
 export function Categories() {
   const user = useStore(state => state.user);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [_loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<CategoryType | 'all'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -31,20 +31,32 @@ export function Categories() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchCategories = async () => {
+    const fetchData = async () => {
       if (user?.uid) {
         try {
-          const data = await getCategories(user.uid);
-          setCategories(data);
+          const [catData, txData] = await Promise.all([
+            getCategories(user.uid),
+            getTransactions(user.uid)
+          ]);
+          setCategories(catData);
+          setTransactions(txData);
         } catch (error) {
-          console.error('Error fetching categories:', error);
+          console.error('Error fetching data:', error);
         } finally {
           setLoading(false);
         }
       }
     };
-    fetchCategories();
+    fetchData();
   }, [user?.uid]);
+
+  const categoryIdsWithTransactions = useMemo(() => {
+    return new Set(transactions.map(t => t.categoryId));
+  }, [transactions]);
+
+  const hasTransactions = (categoryId: string) => {
+    return categoryIdsWithTransactions.has(categoryId);
+  };
 
   const [formData, setFormData] = useState({
     name: '',
@@ -56,10 +68,6 @@ export function Categories() {
   const filteredCategories = categories.filter(c => 
     typeFilter === 'all' || c.type === typeFilter
   );
-
-  const hasTransactions = (categoryId: string) => {
-    return mockTransactions.some(t => t.categoryId === categoryId);
-  };
 
   const openModal = (category?: Category) => {
     if (category) {

@@ -2,11 +2,10 @@ import { useState, useMemo, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { Layout } from '../components/layout';
 import { Card, Button, Input, Modal, Select } from '../components/ui';
-import { mockCategories } from '../data/mock';
-import { formatCurrency, formatDate, getCategoryById, toDate } from '../utils/formatters';
-import { getTransactions, addTransaction, updateTransaction, deleteTransaction } from '../services/firestore';
+import { formatCurrency, formatDate, toDate } from '../utils/formatters';
+import { getTransactions, addTransaction, updateTransaction, deleteTransaction, getCategories } from '../services/firestore';
 import { useStore } from '../store/useStore';
-import type { Transaction, TransactionType } from '../types';
+import type { Transaction, TransactionType, Category } from '../types';
 
 type SortField = 'date' | 'amount' | 'category';
 type SortOrder = 'asc' | 'desc';
@@ -14,6 +13,7 @@ type SortOrder = 'asc' | 'desc';
 export function Transactions() {
   const user = useStore(state => state.user);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [_loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all');
@@ -26,19 +26,23 @@ export function Transactions() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchTransactions = async () => {
+    const fetchData = async () => {
       if (user?.uid) {
         try {
-          const data = await getTransactions(user.uid);
-          setTransactions(data);
+          const [txData, catData] = await Promise.all([
+            getTransactions(user.uid),
+            getCategories(user.uid)
+          ]);
+          setTransactions(txData);
+          setCategories(catData);
         } catch (error) {
-          console.error('Error fetching transactions:', error);
+          console.error('Error fetching data:', error);
         } finally {
           setLoading(false);
         }
       }
     };
-    fetchTransactions();
+    fetchData();
   }, [user?.uid]);
 
   const [formData, setFormData] = useState({
@@ -56,7 +60,7 @@ export function Transactions() {
       const searchLower = search.toLowerCase();
       result = result.filter(t => 
         t.description.toLowerCase().includes(searchLower) ||
-        getCategoryById(t.categoryId, mockCategories)?.name.toLowerCase().includes(searchLower)
+        categories.find(c => c.id === t.categoryId)?.name.toLowerCase().includes(searchLower)
       );
     }
 
@@ -75,8 +79,8 @@ export function Transactions() {
       } else if (sortField === 'amount') {
         comparison = a.amount - b.amount;
       } else if (sortField === 'category') {
-        const catA = getCategoryById(a.categoryId, mockCategories)?.name || '';
-        const catB = getCategoryById(b.categoryId, mockCategories)?.name || '';
+        const catA = categories.find(c => c.id === a.categoryId)?.name || '';
+        const catB = categories.find(c => c.id === b.categoryId)?.name || '';
         comparison = catA.localeCompare(catB);
       }
       return sortOrder === 'asc' ? comparison : -comparison;
@@ -106,11 +110,12 @@ export function Transactions() {
       });
     } else {
       setEditingTransaction(null);
+      const defaultCat = categories.find(c => c.type === 'expense' || c.type === 'account');
       setFormData({
         type: 'expense',
         amount: '',
         date: new Date().toISOString().split('T')[0],
-        categoryId: mockCategories.find(c => c.type === 'expense')?.id || '',
+        categoryId: defaultCat?.id || '',
         description: '',
       });
     }
@@ -126,7 +131,7 @@ export function Transactions() {
     e.preventDefault();
     
     const categoryType = formData.type;
-    const categoriesForType = mockCategories.filter(c => c.type === categoryType || c.type === 'account');
+    const categoriesForType = categories.filter(c => c.type === categoryType || c.type === 'account');
     const defaultCategory = categoriesForType.find(c => c.id === formData.categoryId) || categoriesForType[0];
 
     const transactionData = {
@@ -162,7 +167,7 @@ export function Transactions() {
     }
   };
 
-  const categoryOptions = mockCategories
+  const categoryOptions = categories
     .filter(c => formData.type === 'income' ? c.type === 'income' : c.type === 'expense' || c.type === 'account')
     .map(c => ({ value: c.id, label: `${c.icon} ${c.name}` }));
 
@@ -174,7 +179,7 @@ export function Transactions() {
 
   const filterCategoryOptions = [
     { value: 'all', label: 'Todas' },
-    ...mockCategories.map(c => ({ value: c.id, label: `${c.icon} ${c.name}` })),
+    ...categories.map(c => ({ value: c.id, label: `${c.icon} ${c.name}` })),
   ];
 
   return (
@@ -265,7 +270,7 @@ export function Transactions() {
             </thead>
             <tbody>
               {filteredTransactions.map(transaction => {
-                const category = getCategoryById(transaction.categoryId, mockCategories);
+                const category = categories.find(c => c.id === transaction.categoryId);
                 return (
                   <tr 
                     key={transaction.id}
