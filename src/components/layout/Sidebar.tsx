@@ -81,12 +81,12 @@ export function Sidebar() {
           <div className="flex items-center gap-3 mb-3">
             <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
               <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                {user?.name?.charAt(0).toUpperCase() || 'U'}
+                {user?.displayName?.charAt(0).toUpperCase() || 'U'}
               </span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                {user?.name || 'Usuário'}
+                {user?.displayName || 'Usuário'}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                 {user?.email || 'email@exemplo.com'}

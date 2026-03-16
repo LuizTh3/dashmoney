@@ -1,6 +1,20 @@
-import { format, parseISO, startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay, endOfWeek, endOfMonth, endOfYear, isWithinInterval } from 'date-fns';
+import { format, startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay, endOfWeek, endOfMonth, endOfYear, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Transaction, Category, KPIData, FilterPeriod } from '../types';
+import { Timestamp } from 'firebase/firestore';
+
+export const toDate = (date: Date | Timestamp | string | number): Date => {
+  if (date instanceof Timestamp) {
+    return date.toDate();
+  }
+  if (date instanceof Date) {
+    return date;
+  }
+  if (typeof date === 'string' || typeof date === 'number') {
+    return new Date(date);
+  }
+  return new Date();
+};
 
 export const formatCurrency = (value: number, currency = 'BRL'): string => {
   return new Intl.NumberFormat('pt-BR', {
@@ -9,12 +23,12 @@ export const formatCurrency = (value: number, currency = 'BRL'): string => {
   }).format(value);
 };
 
-export const formatDate = (date: Date | string, pattern = 'dd/MM/yyyy'): string => {
-  const d = typeof date === 'string' ? parseISO(date) : date;
+export const formatDate = (date: Date | Timestamp | string, pattern = 'dd/MM/yyyy'): string => {
+  const d = toDate(date);
   return format(d, pattern, { locale: ptBR });
 };
 
-export const formatDateShort = (date: Date | string): string => {
+export const formatDateShort = (date: Date | Timestamp | string): string => {
   return formatDate(date, 'dd MMM');
 };
 
@@ -40,9 +54,10 @@ export const getDateRange = (period: FilterPeriod): { start: Date; end: Date } =
 export const filterTransactionsByPeriod = (transactions: Transaction[], period: FilterPeriod): Transaction[] => {
   const { start, end } = getDateRange(period);
   
-  return transactions.filter(t => 
-    isWithinInterval(t.date, { start, end })
-  );
+  return transactions.filter(t => {
+    const transactionDate = toDate(t.date);
+    return isWithinInterval(transactionDate, { start, end });
+  });
 };
 
 export const calculateKPIs = (
@@ -83,7 +98,7 @@ export const calculateKPIs = (
   
   while (currentDate <= end) {
     const dayTransactions = transactions.filter(t => 
-      format(t.date, 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
+      format(toDate(t.date), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
     );
     
     dayTransactions.forEach(t => {

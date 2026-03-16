@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sun, Moon, LogOut, User, Mail } from 'lucide-react';
 import { Layout } from '../components/layout';
 import { Card, Button, Select } from '../components/ui';
 import { useStore } from '../store/useStore';
+import { updateUserPreferences } from '../services/firestore';
 
 const CURRENCY_OPTIONS = [
   { value: 'BRL', label: 'Real (R$)' },
@@ -13,8 +14,37 @@ const CURRENCY_OPTIONS = [
 
 export function Settings() {
   const navigate = useNavigate();
-  const { user, theme, toggleTheme, logout } = useStore();
+  const { user, theme, logout, setTheme } = useStore();
   const [currency, setCurrency] = useState(user?.currency || 'BRL');
+
+  useEffect(() => {
+    if (user?.currency) {
+      setCurrency(user.currency);
+    }
+  }, [user?.currency]);
+
+  const handleCurrencyChange = async (value: string) => {
+    setCurrency(value);
+    if (user?.uid) {
+      try {
+        await updateUserPreferences(user.uid, { currency: value });
+      } catch (error) {
+        console.error('Error updating currency:', error);
+      }
+    }
+  };
+
+  const handleThemeToggle = async () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    if (user?.uid) {
+      try {
+        await updateUserPreferences(user.uid, { darkMode: newTheme === 'dark' });
+      } catch (error) {
+        console.error('Error updating theme preference:', error);
+      }
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -45,7 +75,7 @@ export function Settings() {
               </span>
             </div>
             <button
-              onClick={toggleTheme}
+              onClick={handleThemeToggle}
               className={`
                 relative inline-flex h-6 w-11 items-center rounded-full transition-colors
                 ${theme === 'dark' ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}
@@ -70,7 +100,7 @@ export function Settings() {
             <Select
               label="Moeda"
               value={currency}
-              onChange={e => setCurrency(e.target.value)}
+              onChange={e => handleCurrencyChange(e.target.value)}
               options={CURRENCY_OPTIONS}
             />
           </div>
@@ -88,7 +118,7 @@ export function Settings() {
               </div>
               <div>
                 <p className="font-medium text-gray-900 dark:text-gray-100">
-                  {user?.name || 'Usuário'}
+                  {user?.displayName || 'Usuário'}
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
                   <Mail className="w-3 h-3" />

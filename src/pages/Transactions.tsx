@@ -1,16 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { Layout } from '../components/layout';
 import { Card, Button, Input, Modal, Select } from '../components/ui';
-import { mockTransactions, mockCategories } from '../data/mock';
-import { formatCurrency, formatDate, getCategoryById } from '../utils/formatters';
+import { mockCategories } from '../data/mock';
+import { formatCurrency, formatDate, getCategoryById, toDate } from '../utils/formatters';
+import { getTransactions, addTransaction, updateTransaction, deleteTransaction } from '../services/firestore';
+import { useStore } from '../store/useStore';
 import type { Transaction, TransactionType } from '../types';
 
 type SortField = 'date' | 'amount' | 'category';
 type SortOrder = 'asc' | 'desc';
 
 export function Transactions() {
-  const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions);
+  const user = useStore(state => state.user);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [_loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -20,6 +24,22 @@ export function Transactions() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      if (user?.uid) {
+        try {
+          const data = await getTransactions(user.uid);
+          setTransactions(data);
+        } catch (error) {
+          console.error('Error fetching transactions:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchTransactions();
+  }, [user?.uid]);
 
   const [formData, setFormData] = useState({
     type: 'expense' as TransactionType,
@@ -51,7 +71,7 @@ export function Transactions() {
     result.sort((a, b) => {
       let comparison = 0;
       if (sortField === 'date') {
-        comparison = a.date.getTime() - b.date.getTime();
+        comparison = toDate(a.date).getTime() - toDate(b.date).getTime();
       } else if (sortField === 'amount') {
         comparison = a.amount - b.amount;
       } else if (sortField === 'category') {
@@ -80,7 +100,7 @@ export function Transactions() {
       setFormData({
         type: transaction.type,
         amount: transaction.amount.toString(),
-        date: transaction.date.toISOString().split('T')[0],
+        date: toDate(transaction.date).toISOString().split('T')[0],
         categoryId: transaction.categoryId,
         description: transaction.description,
       });
@@ -102,15 +122,15 @@ export function Transactions() {
     setEditingTransaction(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const categoryType = formData.type;
     const categoriesForType = mockCategories.filter(c => c.type === categoryType || c.type === 'account');
     const defaultCategory = categoriesForType.find(c => c.id === formData.categoryId) || categoriesForType[0];
 
-    const transaction: Transaction = {
-      id: editingTransaction?.id || Date.now().toString(),
+    const transactionData = {
+      userId: user!.uid,
       type: formData.type,
       amount: parseFloat(formData.amount),
       date: new Date(formData.date),
@@ -118,18 +138,28 @@ export function Transactions() {
       description: formData.description,
     };
 
-    if (editingTransaction) {
-      setTransactions(prev => prev.map(t => t.id === transaction.id ? transaction : t));
-    } else {
-      setTransactions(prev => [transaction, ...prev]);
+    try {
+      if (editingTransaction) {
+        await updateTransaction(editingTransaction.id, transactionData);
+        setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? { ...t, ...transactionData } : t));
+      } else {
+        const newId = await addTransaction(transactionData);
+        setTransactions(prev => [{ ...transactionData, id: newId, createdAt: new Date(), updatedAt: new Date() }, ...prev]);
+      }
+      closeModal();
+    } catch (error) {
+      console.error('Error saving transaction:', error);
     }
-
-    closeModal();
   };
 
-  const handleDelete = (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
-    setDeleteConfirm(null);
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteTransaction(id);
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      setDeleteConfirm(null);
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+    }
   };
 
   const categoryOptions = mockCategories

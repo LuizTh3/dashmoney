@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 import { Layout } from '../components/layout';
 import { Card, Button, Input, Modal, Select } from '../components/ui';
-import { mockCategories, mockTransactions } from '../data/mock';
+import { mockTransactions } from '../data/mock';
+import { getCategories, addCategory, updateCategory, deleteCategory } from '../services/firestore';
+import { useStore } from '../store/useStore';
 import type { Category, CategoryType } from '../types';
 
 const CATEGORY_COLORS = [
@@ -19,12 +21,30 @@ const EMOJI_OPTIONS = [
 ];
 
 export function Categories() {
-  const [categories, setCategories] = useState<Category[]>(mockCategories);
+  const user = useStore(state => state.user);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [_loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<CategoryType | 'all'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      if (user?.uid) {
+        try {
+          const data = await getCategories(user.uid);
+          setCategories(data);
+        } catch (error) {
+          console.error('Error fetching categories:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchCategories();
+  }, [user?.uid]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -69,35 +89,44 @@ export function Categories() {
     setDeleteError(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const category: Category = {
-      id: editingCategory?.id || Date.now().toString(),
+    const categoryData = {
+      userId: user!.uid,
       name: formData.name,
       icon: formData.icon,
       color: formData.color,
       type: formData.type,
     };
 
-    if (editingCategory) {
-      setCategories(prev => prev.map(c => c.id === category.id ? category : c));
-    } else {
-      setCategories(prev => [...prev, category]);
+    try {
+      if (editingCategory) {
+        await updateCategory(editingCategory.id, categoryData);
+        setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, ...categoryData } : c));
+      } else {
+        const newId = await addCategory(categoryData);
+        setCategories(prev => [...prev, { ...categoryData, id: newId, createdAt: new Date() }]);
+      }
+      closeModal();
+    } catch (error) {
+      console.error('Error saving category:', error);
     }
-
-    closeModal();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (hasTransactions(id)) {
       setDeleteError('Esta categoria possui transações vinculadas e não pode ser excluída.');
       return;
     }
 
-    setCategories(prev => prev.filter(c => c.id !== id));
-    setDeleteConfirm(null);
-    setDeleteError(null);
+    try {
+      await deleteCategory(id);
+      setCategories(prev => prev.filter(c => c.id !== id));
+      setDeleteConfirm(null);
+    } catch (error) {
+      console.error('Error deleting category:', error);
+    }
   };
 
   const typeOptions = [

@@ -1,30 +1,39 @@
+import type { Timestamp } from 'firebase/firestore';
+
 export type TransactionType = 'income' | 'expense';
 
 export type CategoryType = 'expense' | 'account' | 'income';
 
 export interface Category {
   id: string;
+  userId: string;
   name: string;
+  type: CategoryType;
   icon: string;
   color: string;
-  type: CategoryType;
+  createdAt: Timestamp | Date;
 }
 
 export interface Transaction {
   id: string;
+  userId: string;
   type: TransactionType;
   amount: number;
-  date: Date;
   categoryId: string;
   description: string;
+  date: Timestamp | Date;
+  createdAt: Timestamp | Date;
+  updatedAt: Timestamp | Date;
 }
 
 export interface User {
-  id: string;
+  uid: string;
   email: string;
-  name: string;
+  displayName: string;
   currency: string;
+  darkMode: boolean;
   photoURL?: string;
+  createdAt: Timestamp | Date;
 }
 
 export interface FilterPeriod {

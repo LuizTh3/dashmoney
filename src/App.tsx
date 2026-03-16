@@ -6,11 +6,17 @@ import { useStore } from './store/useStore';
 
 function App() {
   const theme = useStore(state => state.theme);
+  const initAuth = useStore(state => state.initAuth);
 
   useEffect(() => {
     document.documentElement.classList.remove('light', 'dark');
     document.documentElement.classList.add(theme);
   }, [theme]);
+
+  useEffect(() => {
+    const unsubscribe = initAuth();
+    return () => unsubscribe();
+  }, [initAuth]);
 
   return (
     <BrowserRouter>

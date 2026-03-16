@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Layout } from '../components/layout';
 import { Card, Select } from '../components/ui';
 import { KPICard } from '../components/dashboard/KPICard';
 import { useStore } from '../store/useStore';
-import { mockTransactions, mockCategories } from '../data/mock';
+import { getTransactions, getCategories } from '../services/firestore';
 import { formatCurrency, formatDate, calculateKPIs, getCategoryById } from '../utils/formatters';
-import type { FilterPeriod } from '../types';
+import type { FilterPeriod, Transaction, Category } from '../types';
 
 const periodOptions = [
   { value: 'day', label: 'Dia' },
@@ -16,8 +16,32 @@ const periodOptions = [
 ];
 
 export function Home() {
+  const user = useStore(state => state.user);
   const { filterPeriod, setFilterPeriod } = useStore();
   const [period, setPeriod] = useState(filterPeriod.type);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [_loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (user?.uid) {
+        try {
+          const [transactionsData, categoriesData] = await Promise.all([
+            getTransactions(user.uid),
+            getCategories(user.uid)
+          ]);
+          setTransactions(transactionsData);
+          setCategories(categoriesData);
+        } catch (error) {
+          console.error('Error fetching data:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchData();
+  }, [user?.uid]);
 
   const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newPeriod = e.target.value as FilterPeriod['type'];
@@ -26,8 +50,8 @@ export function Home() {
   };
 
   const kpis = useMemo(() => 
-    calculateKPIs(mockTransactions, mockCategories, filterPeriod),
-    [filterPeriod]
+    calculateKPIs(transactions, categories, filterPeriod),
+    [transactions, categories, filterPeriod]
   );
 
   const pieData = kpis.expensesByCategory.map(item => ({
@@ -196,8 +220,8 @@ export function Home() {
             Últimos Lançamentos
           </h3>
           <div className="space-y-3">
-            {mockTransactions.slice(0, 5).map(transaction => {
-              const category = getCategoryById(transaction.categoryId, mockCategories);
+            {transactions.slice(0, 5).map(transaction => {
+              const category = getCategoryById(transaction.categoryId, categories);
               return (
                 <div 
                   key={transaction.id}
